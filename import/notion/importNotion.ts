@@ -242,6 +242,7 @@ function convert(input: any[], title: string): Block[] {
     console.log(`Board: ${title}`)
     board.rootId = board.id
     board.title = title
+    board.fields.cardProperties = []
 
     // Each column is a card property
     const columns = getColumns(input)
@@ -271,8 +272,8 @@ function convert(input: any[], title: string): Block[] {
 
     // Board view
     const view = createBoardView()
-    view.title = 'Board View'
-    view.fields.viewType = 'board'
+    view.title = 'Gallery View'
+    view.fields.viewType = 'gallery'
     view.rootId = board.id
     view.parentId = board.id
     blocks.push(view)
