@@ -5,7 +5,7 @@ import path from 'path'
 import {exit} from 'process'
 import {ArchiveUtils} from '../util/archive'
 import {Block} from '../../webapp/src/blocks/block'
-import {IPropertyTemplate, createBoard} from '../../webapp/src/blocks/board'
+import {IPropertyTemplate, IPropertyOption, createBoard} from '../../webapp/src/blocks/board'
 import {createBoardView} from '../../webapp/src/blocks/boardView'
 import {createCard} from '../../webapp/src/blocks/card'
 import {createTextBlock} from '../../webapp/src/blocks/textBlock'
@@ -40,7 +40,7 @@ async function main() {
         showHelp()
     }
 
-    if (!fs.existsSync(inputFolder)){
+    if (!fs.existsSync(inputFolder)) {
         console.log(`Folder not found: ${inputFolder}`)
         exit(2)
     }
@@ -88,12 +88,12 @@ function getCsvFilePath(inputFolder: string): string | undefined {
 }
 
 function getMarkdown(cardTitle: string): string | undefined {
-    if (!fs.existsSync(markdownFolder)){ return undefined}
+    if (!fs.existsSync(markdownFolder)) {return undefined}
     const files = fs.readdirSync(markdownFolder)
     const file = files.find((o) => {
         const basename = path.basename(o)
         const components = basename.split(' ')
-        const fileCardTitle = components.slice(0, components.length-1).join(' ')
+        const fileCardTitle = components.slice(0, components.length - 1).join(' ')
         if (fileCardTitle === cardTitle) {
             return o
         }
@@ -117,6 +117,123 @@ function getColumns(input: any[]) {
     return keys.slice(1)
 }
 
+function fixValue(value: string): string {
+    return value.replace(/^https:\/\/www\.notion\.so([0-9a-zA-Z])/g, '$1');
+}
+
+function createCardProperty(column: string, values: string[]): IPropertyTemplate {
+    const urls = values.filter(value => /^https?:\/\/.+$/.test(value));
+    if (urls.length / values.length > 0.8) {
+        // url
+        return {
+            id: Utils.createGuid(),
+            name: column,
+            type: 'url',
+            options: []
+        }
+    }
+
+    const emails = values.filter(value => /^.+?@\w+?\.\w+$/.test(value));
+    if (emails.length / values.length > 0.8) {
+        // email
+        return {
+            id: Utils.createGuid(),
+            name: column,
+            type: 'email',
+            options: []
+        }
+    }
+
+    const phones = values.filter(value => /^(0?9\d{9}|(0|\+98)\d{10})$/.test(value));
+    if (phones.length / values.length > 0.8) {
+        // phone
+        return {
+            id: Utils.createGuid(),
+            name: column,
+            type: 'phone',
+            options: []
+        }
+    }
+
+    const numbers = values.filter(value => /^\d+$/.test(value));
+    if (numbers.length / values.length > 0.8) {
+        // number
+        return {
+            id: Utils.createGuid(),
+            name: column,
+            type: 'number',
+            options: []
+        }
+    }
+
+    const dates = values.filter(value => !isNaN(Date.parse(value)));
+    if (dates.length / values.length > 0.8) {
+        // date
+        return {
+            id: Utils.createGuid(),
+            name: column,
+            type: 'date',
+            options: []
+        }
+    }
+
+    const uniqueValues = new Set(values);
+    const allSplitOptions = values.map((value) => value.split(", ")).flat()
+    const uniqueSplitOptions = new Set(allSplitOptions)
+    if (uniqueValues.size === 2 && uniqueValues.has('Yes') && uniqueValues.has('No')) {
+        // checkbox
+        return {
+            id: Utils.createGuid(),
+            name: column,
+            type: 'checkbox',
+            options: []
+        }
+    }
+    if (allSplitOptions.length > 0 && uniqueSplitOptions.size / allSplitOptions.length < 0.9) {
+        if (allSplitOptions.length / values.length > 1.1) {
+            // multi-select
+            return {
+                id: Utils.createGuid(),
+                name: column,
+                type: 'multiSelect',
+                options: [...uniqueSplitOptions].map(o => {
+                    const color = optionColors[optionColorIndex % optionColors.length]
+                    optionColorIndex = (optionColorIndex + 1) % optionColors.length
+                    return {
+                        id: Utils.createGuid(),
+                        value: o,
+                        color: color,
+                    }
+                })
+            }
+        }
+        else {
+            // select
+            return {
+                id: Utils.createGuid(),
+                name: column,
+                type: 'select',
+                options: [...new Set(values)].map(o => {
+                    const color = optionColors[optionColorIndex % optionColors.length]
+                    optionColorIndex = (optionColorIndex + 1) % optionColors.length
+                    return {
+                        id: Utils.createGuid(),
+                        value: o,
+                        color: color,
+                    }
+                })
+            }
+        }
+    }
+
+    return {
+        id: Utils.createGuid(),
+        name: column,
+        type: 'text',
+        options: []
+    }
+}
+
 function convert(input: any[], title: string): Block[] {
     const blocks: Block[] = []
 
@@ -128,13 +245,23 @@ function convert(input: any[], title: string): Block[] {
 
     // Each column is a card property
     const columns = getColumns(input)
+    let columnValues: {[key: string]: string[]} = {}
+    input.forEach(row => {
+        columns.forEach(column => {
+            const value = fixValue(row[column])
+            if (!columnValues[column]) {
+                columnValues[column] = []
+            }
+            if (!value) {
+                // Skip empty values
+                return
+            }
+            columnValues[column].push(value)
+        })
+    })
+
     columns.forEach(column => {
-        const cardProperty: IPropertyTemplate = {
-            id: Utils.createGuid(),
-            name: column,
-            type: 'select',
-            options: []
-        }
+        const cardProperty: IPropertyTemplate = createCardProperty(column, columnValues[column])
         board.fields.cardProperties.push(cardProperty)
     })
 
@@ -171,26 +298,38 @@ function convert(input: any[], title: string): Block[] {
 
         // Card properties, skip first key which is the title
         for (const key of keys.slice(1)) {
-            const value = row[key]
+            const value = fixValue(row[key])
             if (!value) {
                 // Skip empty values
                 continue
             }
 
             const cardProperty = board.fields.cardProperties.find((o) => o.name === key)!
-            let option = cardProperty.options.find((o) => o.value === value)
-            if (!option) {
-                const color = optionColors[optionColorIndex % optionColors.length]
-                optionColorIndex += 1
-                option = {
-                    id: Utils.createGuid(),
-                    value,
-                    color: color,
+            if (cardProperty.type === "checkbox") {
+                if (value === "Yes" || value === "No") {
+                    let convertedValue = {"Yes": "true", "No": "false"}[value]
+                    outCard.fields.properties[cardProperty.id] = convertedValue
                 }
-                cardProperty.options.push(option)
             }
-
-            outCard.fields.properties[cardProperty.id] = option.id
+            else if (cardProperty.type === "select") {
+                let option = cardProperty.options.find((o) => o.value === value)
+                if (option) {
+                    outCard.fields.properties[cardProperty.id] = option.id
+                }
+            }
+            else if (cardProperty.type === "multiSelect") {
+                outCard.fields.properties[cardProperty.id] = value.split(", ").map(v => {
+                    const option = cardProperty.options.find((o) => o.value === v)
+                    return option ? option.id : ""
+                })
+            }
+            else if (cardProperty.type === "date") {
+                const date = Date.parse(value)
+                outCard.fields.properties[cardProperty.id] = isNaN(date) ? value : `{"from":${date}}`
+            }
+            else {
+                outCard.fields.properties[cardProperty.id] = value
+            }
         }
 
         blocks.push(outCard)
