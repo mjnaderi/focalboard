@@ -5,7 +5,7 @@ import path from 'path'
 import {exit} from 'process'
 import {ArchiveUtils} from '../util/archive'
 import {Block} from '../../webapp/src/blocks/block'
-import {IPropertyTemplate, IPropertyOption, createBoard} from '../../webapp/src/blocks/board'
+import {IPropertyTemplate, createBoard} from '../../webapp/src/blocks/board'
 import {createBoardView} from '../../webapp/src/blocks/boardView'
 import {createCard} from '../../webapp/src/blocks/card'
 import {createTextBlock} from '../../webapp/src/blocks/textBlock'
@@ -118,11 +118,11 @@ function getColumns(input: any[]) {
 }
 
 function fixValue(value: string): string {
-    return value.replace(/^https:\/\/www\.notion\.so([0-9a-zA-Z])/g, '$1');
+    return value.replace(/^https:\/\/www\.notion\.so([0-9a-zA-Z])/g, '$1')
 }
 
 function createCardProperty(column: string, values: string[]): IPropertyTemplate {
-    const urls = values.filter(value => /^https?:\/\/.+$/.test(value));
+    const urls = values.filter(value => /^https?:\/\/.+$/.test(value))
     if (urls.length / values.length > 0.8) {
         // url
         return {
@@ -133,7 +133,7 @@ function createCardProperty(column: string, values: string[]): IPropertyTemplate
         }
     }
 
-    const emails = values.filter(value => /^.+?@\w+?\.\w+$/.test(value));
+    const emails = values.filter(value => /^.+?@\w+?\.\w+$/.test(value))
     if (emails.length / values.length > 0.8) {
         // email
         return {
@@ -144,7 +144,7 @@ function createCardProperty(column: string, values: string[]): IPropertyTemplate
         }
     }
 
-    const phones = values.filter(value => /^(0?9\d{9}|(0|\+98)\d{10})$/.test(value));
+    const phones = values.filter(value => /^(0?9\d{9}|(0|\+98)\d{10})$/.test(value))
     if (phones.length / values.length > 0.8) {
         // phone
         return {
@@ -155,7 +155,7 @@ function createCardProperty(column: string, values: string[]): IPropertyTemplate
         }
     }
 
-    const numbers = values.filter(value => /^\d+$/.test(value));
+    const numbers = values.filter(value => /^\d+$/.test(value))
     if (numbers.length / values.length > 0.8) {
         // number
         return {
@@ -166,7 +166,7 @@ function createCardProperty(column: string, values: string[]): IPropertyTemplate
         }
     }
 
-    const dates = values.filter(value => !isNaN(Date.parse(value)));
+    const dates = values.filter(value => !isNaN(Date.parse(value)))
     if (dates.length / values.length > 0.8) {
         // date
         return {
@@ -177,7 +177,7 @@ function createCardProperty(column: string, values: string[]): IPropertyTemplate
         }
     }
 
-    const uniqueValues = new Set(values);
+    const uniqueValues = new Set(values)
     const allSplitOptions = values.map((value) => value.split(", ")).flat()
     const uniqueSplitOptions = new Set(allSplitOptions)
     if (uniqueValues.size === 2 && uniqueValues.has('Yes') && uniqueValues.has('No')) {
@@ -245,7 +245,7 @@ function convert(input: any[], title: string): Block[] {
 
     // Each column is a card property
     const columns = getColumns(input)
-    let columnValues: {[key: string]: string[]} = {}
+    const columnValues: {[key: string]: string[]} = {}
     input.forEach(row => {
         columns.forEach(column => {
             const value = fixValue(row[column])
@@ -307,12 +307,11 @@ function convert(input: any[], title: string): Block[] {
             const cardProperty = board.fields.cardProperties.find((o) => o.name === key)!
             if (cardProperty.type === "checkbox") {
                 if (value === "Yes" || value === "No") {
-                    let convertedValue = {"Yes": "true", "No": "false"}[value]
-                    outCard.fields.properties[cardProperty.id] = convertedValue
+                    outCard.fields.properties[cardProperty.id] = {"Yes": "true", "No": "false"}[value]
                 }
             }
             else if (cardProperty.type === "select") {
-                let option = cardProperty.options.find((o) => o.value === value)
+                const option = cardProperty.options.find((o) => o.value === value)
                 if (option) {
                     outCard.fields.properties[cardProperty.id] = option.id
                 }
